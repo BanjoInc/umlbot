@@ -34,11 +34,15 @@ public class Uml {
 
 	final String url;
 	final Set<String> tokens;
+	final String pngPath;
 
-	Uml(App app, String url, Set<String> tokens) {
+	Uml(App app, String url, Set<String> tokens, String pngPath) {
 		this.url = url;
 		this.tokens = tokens;
+		this.pngPath = "/" + pngPath;
+
 		app.get("/favicon.ico", (req, res) -> Uml.class.getClassLoader().getResource("favicon.ico"));
+		app.get(this.pngPath, this::getPngImgs);
 		app.get("/:encoded", this::imgs);
 		app.post("/", this::outgoing).type("application/json");
 		app.get("/", (req, res) -> "I'm running!! yey!");
@@ -99,6 +103,23 @@ public class Uml {
 				.orElse(404);
 	}
 
+	Object getPngImgs(Request request, Response response) throws Exception {
+		LOG.info(request);
+
+		String content = request.query("text").map(this::unescape).orElse("").trim();
+
+		if (content.length() < 1 || content.length() > 5000) {
+			return ignored;
+		}
+
+		LOG.info(content);
+
+		SourceStringReader source = new SourceStringReader(content);
+
+		return response.type("image/png").render(source,
+						Renderer.ofStream((m, os) -> m.generateImage(os, new FileFormatOption(FileFormat.PNG, false))));
+	}
+
 	public static void main(String[] args) {
 		// https://devcenter.heroku.com/articles/dynos#local-environment-variables
 		LOG.info(System.getenv());
@@ -135,6 +156,11 @@ public class Uml {
 			}
 		}
 
+		String pngPath = System.getenv("PNG_PATH");
+		if (pngPath == null || pngPath.isEmpty()) {
+			pngPath = "png";
+		}
+
 		App app = new App() {
 			@Override
 			protected HttpHandler buildHandlers() {
@@ -142,7 +168,7 @@ public class Uml {
 				return new CacheHandler(cache, super.buildHandlers());
 			}
 		};
-		new Uml(app, url, tokens);
+		new Uml(app, url, tokens, pngPath);
 		app.listen(p).addShutdownHook();
 	}
 }
